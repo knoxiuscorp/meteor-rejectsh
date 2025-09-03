@@ -2,9 +2,6 @@ package anticope.rejects.gui.screens;
 
 import anticope.rejects.mixin.EntityAccessor;
 import anticope.rejects.modules.InteractionMenu;
-import com.mojang.blaze3d.opengl.GlStateManager;
-import com.mojang.blaze3d.platform.DestFactor;
-import com.mojang.blaze3d.platform.SourceFactor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.meteor.KeyEvent;
@@ -17,7 +14,6 @@ import meteordevelopment.starscript.compiler.Parser;
 import meteordevelopment.starscript.utils.Error;
 import meteordevelopment.starscript.utils.StarscriptError;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gl.ShaderProgram;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.screen.Screen;
@@ -29,7 +25,6 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.SaddledComponent;
 import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.passive.AbstractHorseEntity;
 import net.minecraft.entity.passive.HorseEntity;
@@ -46,6 +41,7 @@ import net.minecraft.util.PlayerInput;
 import net.minecraft.util.math.MathHelper;
 import org.joml.Vector2f;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.opengl.GL11;
 
 import java.awt.*;
 import java.util.ArrayList;
@@ -106,9 +102,7 @@ public class InteractionScreen extends Screen {
             case AbstractHorseEntity abstractHorseEntity -> functions.put("Open Inventory", (Entity e) -> {
                 closeScreen();
                 if (client.player.isRiding()) {
-//                    client.player.networkHandler.sendPacket(new PlayerInputC2SPacket(0, 0, false, true));
                     client.player.networkHandler.sendPacket(new PlayerInputC2SPacket(new PlayerInput(false, false, false, false, false, true, false)));
-
                 }
                 client.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.interact(entity, true, Hand.MAIN_HAND));
                 client.player.setSneaking(false);
@@ -233,7 +227,6 @@ public class InteractionScreen extends Screen {
 
     public void close() {
         cursorMode(GLFW.GLFW_CURSOR_NORMAL);
-        // This makes the magic
         if (focusedString != null) {
             functions.get(focusedString).accept(this.entity);
         } else
@@ -248,15 +241,13 @@ public class InteractionScreen extends Screen {
         MatrixStack matrix = context.getMatrices();
         // Fake crosshair stuff
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        GlStateManager._enableBlend();
-// Common blend mode for UI elements
-        GlStateManager._blendFuncSeparate(
-                770,  // GL_SRC_ALPHA
-                771,  // GL_ONE_MINUS_SRC_ALPHA
-                1,    // GL_ONE
-                0     // GL_ZERO
+        RenderSystem.enableBlend();
+        RenderSystem.blendFuncSeparate(
+                GL11.GL_SRC_ALPHA,
+                GL11.GL_ONE_MINUS_SRC_ALPHA,
+                GL11.GL_ONE,
+                GL11.GL_ZERO
         );
-
 
         context.drawTexture(RenderLayer::getGuiTextured, GUI_ICONS_TEXTURE,  crosshairX - 8, crosshairY - 8, 0, 0, 15, 15, 256, 256);
 
@@ -280,21 +271,18 @@ public class InteractionScreen extends Screen {
         Vector2f center = new Vector2f(width / 2, height / 2);
         mouse.sub(center);
 
-        // Add this check to prevent normalizing a zero vector
         if (mouse.x != 0 || mouse.y != 0) {
             mouse.normalize();
         }
 
         if (scale == 0) scale = 4;
 
-        // Move crossHair based on distance between mouse and center. But with limit
         if (Math.hypot(width / 2 - mouseX, height / 2 - mouseY) < 1f / scale * 200f)
             mouse.mul((float) Math.hypot(width / 2 - mouseX, height / 2 - mouseY));
         else
             mouse.mul(1f / scale * 200f);
         return mouse;
     }
-
 
     private void drawDots(DrawContext context, int radius, int mouseX, int mouseY) {
         ArrayList<Point> pointList = new ArrayList<Point>();
@@ -303,13 +291,11 @@ public class InteractionScreen extends Screen {
         int i = 0;
 
         for (String string : functions.keySet()) {
-            // Just some fancy calculations to get the positions of the dots
             double s = (double) i / functions.size() * 2 * Math.PI;
             int x = (int) Math.round(radius * Math.cos(s) + width / 2);
             int y = (int) Math.round(radius * Math.sin(s) + height / 2);
             drawTextField(context, x, y, string);
 
-            // Calculate lowest distance between mouse and dot
             if (Math.hypot(x - mouseX, y - mouseY) < lowestDistance) {
                 lowestDistance = Math.hypot(x - mouseX, y - mouseY);
                 focusedDot = i;
@@ -320,7 +306,6 @@ public class InteractionScreen extends Screen {
             i++;
         }
 
-        // Go through all point and if it is focused -> drawing different color, changing closest string value
         for (int j = 0; j < functions.size(); j++) {
             Point point = pointList.get(j);
             if (pointList.get(focusedDot) == point) {
@@ -349,9 +334,7 @@ public class InteractionScreen extends Screen {
         }
     }
 
-    // Literally drawing it in code
     private void drawDot(DrawContext context, int startX, int startY, int colorInner) {
-        // Draw dot itself
         context.drawHorizontalLine(startX + 2, startX + 5, startY, borderColor);
         context.drawHorizontalLine(startX + 1, startX + 6, startY + 1, borderColor);
         context.drawHorizontalLine(startX + 2, startX + 5, startY + 1, colorInner);
@@ -361,7 +344,6 @@ public class InteractionScreen extends Screen {
         context.drawHorizontalLine(startX + 2, startX + 5, startY + 6, colorInner);
         context.drawHorizontalLine(startX + 2, startX + 5, startY + 7, borderColor);
 
-        // Draw light overlay
         context.drawHorizontalLine(startX + 2, startX + 3, startY + 1, 0x80FFFFFF);
         context.drawHorizontalLine(startX + 1, startX + 1, startY + 2, 0x80FFFFFF);
     }
