@@ -10,15 +10,14 @@ import meteordevelopment.meteorclient.utils.world.Dimension;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.registry.*;
 import net.minecraft.registry.entry.RegistryEntry;
-
 import net.minecraft.registry.entry.RegistryEntryList;
 import net.minecraft.util.math.intprovider.ConstantIntProvider;
 import net.minecraft.util.math.intprovider.IntProvider;
-
 import net.minecraft.world.HeightLimitView;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.dimension.DimensionOptions;
 import net.minecraft.world.gen.HeightContext;
+import net.minecraft.world.gen.WorldPreset;
 import net.minecraft.world.gen.WorldPresets;
 import net.minecraft.world.gen.feature.*;
 import net.minecraft.world.gen.feature.util.PlacedFeatureIndexer;
@@ -29,7 +28,6 @@ import net.minecraft.world.gen.placementmodifier.PlacementModifier;
 import net.minecraft.world.gen.placementmodifier.RarityFilterPlacementModifier;
 
 import java.util.*;
-
 
 public class Ore {
 
@@ -46,22 +44,19 @@ public class Ore {
     public static final  List<Setting<Boolean>>   oreSettings = new ArrayList<>(Arrays.asList(coal, iron, gold, redstone, diamond, lapis, copper, emerald, quartz, debris));
 
     public static Map<RegistryKey<Biome>, List<Ore>> getRegistry(Dimension dimension) {
-        // PATCH: Use the client's dynamic registry manager which is synced with the server
         if (MinecraftClient.getInstance().world == null) return new HashMap<>();
-        DynamicRegistryManager registryManager = MinecraftClient.getInstance().world.getRegistryManager();
+        RegistryWrapper.WrapperLookup registry = MinecraftClient.getInstance().world.getRegistryManager();
 
-        Registry<PlacedFeature> features;
-        Registry<WorldPreset> worldPresets;
+        Optional<Registry<PlacedFeature>> featuresOpt = registry.getOptional(RegistryKeys.PLACED_FEATURE);
+        Optional<Registry<WorldPreset>> presetsOpt = registry.getOptional(RegistryKeys.WORLD_PRESET);
 
-        try {
-            features = registryManager.get(RegistryKeys.PLACED_FEATURE);
-            worldPresets = registryManager.get(RegistryKeys.WORLD_PRESET);
-        } catch (Exception e) {
-            return new HashMap<>(); // Registries not ready, return empty
-        }
+        if (featuresOpt.isEmpty() || presetsOpt.isEmpty()) return new HashMap<>();
+
+        Registry<PlacedFeature> features = featuresOpt.get();
+        Registry<WorldPreset> worldPresets = presetsOpt.get();
 
         var defaultPreset = worldPresets.getEntry(WorldPresets.DEFAULT);
-        if (defaultPreset.isEmpty()) return new HashMap<>(); // Default preset not found
+        if (defaultPreset.isEmpty()) return new HashMap<>();
 
         var reg = defaultPreset.get().value().createDimensionsRegistryHolder().dimensions();
 
@@ -106,7 +101,6 @@ public class Ore {
         registerOre(featureToOre, indexer, features, OrePlacedFeatures.ORE_DEBRIS_SMALL, 7, debris, new Color(209, 27, 245));
         registerOre(featureToOre, indexer, features, OrePlacedFeatures.ORE_ANCIENT_DEBRIS_LARGE, 7, debris, new Color(209, 27, 245));
 
-
         Map<RegistryKey<Biome>, List<Ore>> biomeOreMap = new HashMap<>();
 
         biomes1.forEach(biome -> {
@@ -131,23 +125,19 @@ public class Ore {
             Setting<Boolean> active,
             Color color
     ) {
-        // PATCH: Check if the feature exists before trying to use it. Prevents crashes on servers with custom worldgen.
-        Optional<RegistryEntry.Reference<PlacedFeature>> orePlacementEntry = oreRegistry.getEntry(oreKey);
-        if (orePlacementEntry.isEmpty()) {
-            return; // Skip this ore feature if it doesn't exist
+        Optional<PlacedFeature> orePlacementOpt = oreRegistry.getOrEmpty(oreKey);
+        if (orePlacementOpt.isEmpty()) {
+            return;
         }
 
-        var orePlacement = orePlacementEntry.get().value();
-        if (orePlacement == null) {
-            return; // Also skip if the value is null for some reason
-        }
+        PlacedFeature orePlacement = orePlacementOpt.get();
 
         try {
             int index = indexer.get(genStep).indexMapping().applyAsInt(orePlacement);
             Ore ore = new Ore(orePlacement, genStep, index, active, color);
             map.put(orePlacement, ore);
         } catch (Exception e) {
-            // Something went wrong constructing the ore, so we'll just skip it.
+            // Skips ore if something goes wrong, preventing a crash.
         }
     }
 
@@ -175,10 +165,8 @@ public class Ore {
         for (PlacementModifier modifier : feature.placementModifiers()) {
             if (modifier instanceof CountPlacementModifier) {
                 this.count = ((CountPlacementModifierAccessor) modifier).getCount();
-
             } else if (modifier instanceof HeightRangePlacementModifier) {
                 this.heightProvider = ((HeightRangePlacementModifierAccessor) modifier).getHeight();
-
             } else if (modifier instanceof RarityFilterPlacementModifier) {
                 this.rarity = ((RarityFilterPlacementModifierAccessor) modifier).getChance();
             }
@@ -190,11 +178,8 @@ public class Ore {
             this.discardOnAirChance = oreFeatureConfig.discardOnAirChance;
             this.size = oreFeatureConfig.size;
         } else {
-            // If it's not a standard ore config, we can't get size/discard chance.
-            // We can either throw an error or set defaults. Defaults are safer.
             this.discardOnAirChance = 0;
             this.size = 1;
-            // throw new IllegalStateException("config for " + feature + "is not OreFeatureConfig.class");
         }
 
         if (feature.feature().value().feature() instanceof ScatteredOreFeature) {
