@@ -27,8 +27,7 @@
     ]
   },
   "mixins": [
-    "meteor-rejects.mixins.json",
-    "meteor-rejects-meteor.mixins.json"
+    "meteor-rejects.mixins.json"
   ],
   "accessWidener": "meteor-rejects.accesswidener",
   "custom": {
@@ -37,7 +36,7 @@
   },
   "depends": {
     "java": ">=21",
-    "minecraft": "~${mc_version}",
+    "minecraft": "*",
     "meteor-client": "*"
   }
 }
