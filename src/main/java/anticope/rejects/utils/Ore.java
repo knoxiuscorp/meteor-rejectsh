@@ -39,17 +39,31 @@ public class Ore {
     private static final Setting<Boolean> redstone    = new BoolSetting.Builder().name("Redstone").build();
     private static final Setting<Boolean> diamond     = new BoolSetting.Builder().name("Diamond").build();
     private static final Setting<Boolean> lapis       = new BoolSetting.Builder().name("Lapis").build();
-    private static final Setting<Boolean> copper      = new BoolSetting.Builder().name("Kappa").build();
+    private static final Setting<Boolean> copper      = new BoolSetting.Builder().name("Copper").build();
     private static final Setting<Boolean> emerald     = new BoolSetting.Builder().name("Emerald").build();
     private static final Setting<Boolean> quartz      = new BoolSetting.Builder().name("Quartz").build();
     private static final Setting<Boolean> debris      = new BoolSetting.Builder().name("Ancient Debris").build();
     public static final  List<Setting<Boolean>>   oreSettings = new ArrayList<>(Arrays.asList(coal, iron, gold, redstone, diamond, lapis, copper, emerald, quartz, debris));
 
     public static Map<RegistryKey<Biome>, List<Ore>> getRegistry(Dimension dimension) {
+        // PATCH: Use the client's dynamic registry manager which is synced with the server
+        if (MinecraftClient.getInstance().world == null) return new HashMap<>();
+        DynamicRegistryManager registryManager = MinecraftClient.getInstance().world.getRegistryManager();
 
-        RegistryWrapper.WrapperLookup registry = BuiltinRegistries.createWrapperLookup();
-        RegistryWrapper.Impl<PlacedFeature> features = registry.getOrThrow(RegistryKeys.PLACED_FEATURE);
-        var reg = registry.getOrThrow(RegistryKeys.WORLD_PRESET).getOrThrow(WorldPresets.DEFAULT).value().createDimensionsRegistryHolder().dimensions();
+        Registry<PlacedFeature> features;
+        Registry<WorldPreset> worldPresets;
+
+        try {
+            features = registryManager.get(RegistryKeys.PLACED_FEATURE);
+            worldPresets = registryManager.get(RegistryKeys.WORLD_PRESET);
+        } catch (Exception e) {
+            return new HashMap<>(); // Registries not ready, return empty
+        }
+
+        var defaultPreset = worldPresets.getEntry(WorldPresets.DEFAULT);
+        if (defaultPreset.isEmpty()) return new HashMap<>(); // Default preset not found
+
+        var reg = defaultPreset.get().value().createDimensionsRegistryHolder().dimensions();
 
         var dim = switch (dimension) {
             case Overworld -> reg.get(DimensionOptions.OVERWORLD);
@@ -96,14 +110,14 @@ public class Ore {
         Map<RegistryKey<Biome>, List<Ore>> biomeOreMap = new HashMap<>();
 
         biomes1.forEach(biome -> {
-            biomeOreMap.put(biome.getKey().get(), new ArrayList<>());
-            biome.value().getGenerationSettings().getFeatures().stream()
-                    .flatMap(RegistryEntryList::stream)
-                    .map(RegistryEntry::value)
-                    .filter(featureToOre::containsKey)
-                    .forEach(feature -> {
-                        biomeOreMap.get(biome.getKey().get()).add(featureToOre.get(feature));
-                    });
+            biome.getKey().ifPresent(key -> {
+                biomeOreMap.put(key, new ArrayList<>());
+                biome.value().getGenerationSettings().getFeatures().stream()
+                        .flatMap(RegistryEntryList::stream)
+                        .map(RegistryEntry::value)
+                        .filter(featureToOre::containsKey)
+                        .forEach(feature -> biomeOreMap.get(key).add(featureToOre.get(feature)));
+            });
         });
         return biomeOreMap;
     }
@@ -111,19 +125,30 @@ public class Ore {
     private static void registerOre(
             Map<PlacedFeature, Ore> map,
             List<PlacedFeatureIndexer.IndexedFeatures> indexer,
-            RegistryWrapper.Impl<PlacedFeature> oreRegistry,
+            Registry<PlacedFeature> oreRegistry,
             RegistryKey<PlacedFeature> oreKey,
             int genStep,
             Setting<Boolean> active,
             Color color
     ) {
-        var orePlacement = oreRegistry.getOrThrow(oreKey).value();
+        // PATCH: Check if the feature exists before trying to use it. Prevents crashes on servers with custom worldgen.
+        Optional<RegistryEntry.Reference<PlacedFeature>> orePlacementEntry = oreRegistry.getEntry(oreKey);
+        if (orePlacementEntry.isEmpty()) {
+            return; // Skip this ore feature if it doesn't exist
+        }
 
-        int index = indexer.get(genStep).indexMapping().applyAsInt(orePlacement);
+        var orePlacement = orePlacementEntry.get().value();
+        if (orePlacement == null) {
+            return; // Also skip if the value is null for some reason
+        }
 
-        Ore ore = new Ore(orePlacement, genStep, index, active, color);
-
-        map.put(orePlacement, ore);
+        try {
+            int index = indexer.get(genStep).indexMapping().applyAsInt(orePlacement);
+            Ore ore = new Ore(orePlacement, genStep, index, active, color);
+            map.put(orePlacement, ore);
+        } catch (Exception e) {
+            // Something went wrong constructing the ore, so we'll just skip it.
+        }
     }
 
     public int step;
@@ -165,7 +190,11 @@ public class Ore {
             this.discardOnAirChance = oreFeatureConfig.discardOnAirChance;
             this.size = oreFeatureConfig.size;
         } else {
-            throw new IllegalStateException("config for " + feature + "is not OreFeatureConfig.class");
+            // If it's not a standard ore config, we can't get size/discard chance.
+            // We can either throw an error or set defaults. Defaults are safer.
+            this.discardOnAirChance = 0;
+            this.size = 1;
+            // throw new IllegalStateException("config for " + feature + "is not OreFeatureConfig.class");
         }
 
         if (feature.feature().value().feature() instanceof ScatteredOreFeature) {
