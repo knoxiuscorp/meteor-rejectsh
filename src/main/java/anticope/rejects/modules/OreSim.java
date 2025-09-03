@@ -133,6 +133,11 @@ public class OreSim extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
+        // PATCH: Check if the world is loaded but the ore configuration is not. If so, reload.
+        if (mc.world != null && oreConfig == null) {
+            reload();
+        }
+
         if (mc.player == null || mc.world == null || oreConfig == null) return;
 
         if (baritone() && BaritoneAPI.getProvider().getPrimaryBaritone().getMineProcess().isActive()) {
@@ -169,7 +174,8 @@ public class OreSim extends Module {
             error("No seed found. To set a seed do .seed <seed>");
             this.toggle();
         }
-        reload();
+        // It's safer to let the onTick handler call reload()
+        // reload(); 
     }
 
     @Override
@@ -199,13 +205,16 @@ public class OreSim extends Module {
     }
 
     private void reload() {
+        // If the world is null, we can't get dimension or other data, so we abort.
+        if (mc.world == null) return;
+
         Seed seed = Seeds.get().getSeed();
         if (seed == null) return;
         worldSeed = seed;
         oreConfig = Ore.getRegistry(PlayerUtils.getDimension());
 
         chunkRenderers.clear();
-        if (mc.world != null && worldSeed != null) {
+        if (worldSeed != null) {
             loadVisibleChunks();
         }
     }
@@ -216,6 +225,8 @@ public class OreSim extends Module {
     }
 
     private void doMathOnChunk(Chunk chunk) {
+        // Abort if the configuration hasn't been loaded yet.
+        if (oreConfig == null) return;
 
         var chunkPos = chunk.getPos();
         long chunkKey = chunkPos.toLong();
