@@ -1,8 +1,6 @@
 package anticope.rejects;
 
 import anticope.rejects.commands.*;
-import anticope.rejects.gui.hud.RadarHud;
-import anticope.rejects.gui.themes.rounded.MeteorRoundedGuiTheme;
 import anticope.rejects.modules.*;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
