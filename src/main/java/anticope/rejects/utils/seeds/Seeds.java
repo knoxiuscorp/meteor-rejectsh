@@ -38,43 +38,29 @@ public class Seeds extends System<Seeds> {
 
     public Seed getSeed() {
         try {
-            // Check if we're in single-player (integrated server)
             if (mc != null && mc.isIntegratedServerRunning()) {
                 MinecraftServer server = mc.getServer();
                 if (server != null && server.getOverworld() != null) {
                     MCVersion version = MCVersion.fromString(server.getVersion());
-                    if (version == null) {
-                        version = MCVersion.latest();
-                        java.lang.System.out.println("Warning: Server version could not be parsed. Defaulting to latest.");
-                    }
+                    if (version == null) version = MCVersion.latest();
 
                     long seedValue = server.getOverworld().getSeed();
                     return new Seed(seedValue, version);
-                } else {
-                    java.lang.System.out.println("Warning: Server or Overworld is null.");
                 }
             }
 
-            // Fallback: Try to retrieve the seed from the stored seeds map
             if (seeds != null) {
                 String worldName = Utils.getWorldName();
                 if (worldName != null && seeds.containsKey(worldName)) {
                     return seeds.get(worldName);
-                } else {
-                    java.lang.System.out.println("Warning: World name is null or not found in seeds map.");
                 }
-            } else {
-                java.lang.System.out.println("Warning: Seeds map is null.");
             }
         } catch (Exception e) {
-            java.lang.System.out.println("Error occurred while getting seed: " + e.getMessage());
             e.printStackTrace();
         }
 
-        // Final fallback: return a default seed to prevent crashing
         return new Seed(0L, MCVersion.latest());
     }
-
 
     public void setSeed(String seed, MCVersion version) {
         if (mc.isIntegratedServerRunning()) return;
@@ -89,11 +75,9 @@ public class Seeds extends System<Seeds> {
 
         ServerInfo server = mc.getCurrentServerEntry();
         MCVersion ver = null;
-        if (server != null)
-            ver = MCVersion.fromString(server.version.getString());
+        if (server != null) ver = MCVersion.fromString(server.version.getString());
         if (ver == null) {
-            String targetVer = "unknown";
-            if (server != null) targetVer = server.version.getString();
+            String targetVer = server != null ? server.version.getString() : "unknown";
             sendInvalidVersionWarning(seed, targetVer);
             ver = MCVersion.latest();
         }
@@ -104,21 +88,19 @@ public class Seeds extends System<Seeds> {
     public NbtCompound toTag() {
         NbtCompound tag = new NbtCompound();
         seeds.forEach((key, seed) -> {
-            if (seed == null) return;
-            tag.put(key, seed.toTag());
+            if (seed != null) tag.put(key, seed.toTag());
         });
         return tag;
     }
 
     @Override
     public Seeds fromTag(NbtCompound tag) {
-        tag.getKeys().forEach(key -> {
-            seeds.put(key, Seed.fromTag(tag.getCompoundOrEmpty(key)));
-        });
+        for (String key : tag.getKeys()) {
+            seeds.put(key, Seed.fromTag(tag.getCompound(key)));
+        }
         return this;
     }
 
-    // https://minecraft.wiki/w/Seed_(level_generation)#Java_Edition
     private static long toSeed(String inSeed) {
         try {
             return Long.parseLong(inSeed);
@@ -128,18 +110,21 @@ public class Seeds extends System<Seeds> {
     }
 
     private static void sendInvalidVersionWarning(String seed, String targetVer) {
-        MutableText msg = Text.literal(String.format("Couldn't resolve minecraft version \"%s\". Using %s instead. If you wish to change the version run: ", targetVer, MCVersion.latest().name));
-        String cmd = String.format("%sseed %s ", Config.get().prefix, seed);
-        MutableText cmdText = Text.literal(cmd+"<version>");
-        cmdText.setStyle(cmdText.getStyle()
-                .withUnderline(true)
-                .withClickEvent(new ClickEvent.SuggestCommand(String.format("%sseed %s ", Config.get().prefix, seed)))
-                .withHoverEvent(new HoverEvent.ShowText(Text.literal("run command"))));
-        msg.append(cmdText);
-        msg.setStyle(msg.getStyle()
-                .withColor(Formatting.YELLOW)
+        MutableText msg = Text.literal(
+            String.format("Couldn't resolve minecraft version \"%s\". Using %s instead. If you wish to change the version run: ",
+                targetVer, MCVersion.latest().name)
         );
+
+        String cmd = String.format("%sseed %s ", Config.get().prefix, seed);
+        MutableText cmdText = Text.literal(cmd + "<version>");
+        cmdText.setStyle(cmdText.getStyle()
+            .withUnderline(true)
+            .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, String.format("%sseed %s ", Config.get().prefix, seed)))
+            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("run command")))
+        );
+
+        msg.append(cmdText);
+        msg.setStyle(msg.getStyle().withColor(Formatting.YELLOW));
         ChatUtils.sendMsg("Seed", msg);
     }
-
 }

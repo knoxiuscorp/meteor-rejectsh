@@ -44,10 +44,10 @@ public class RejectsConfig extends System<RejectsConfig> {
     public void setHiddenModules(List<Module> newList) {
         if (newList.size() < hiddenModules.size()) {
             OkPrompt.create()
-                    .title("Hidden Modules")
-                    .message("In order to see the modules you have removed from the list you need to restart Minecraft.")
-                    .id("hidden-modules-unhide")
-                    .show();
+                .title("Hidden Modules")
+                .message("In order to see the modules you have removed from the list you need to restart Minecraft.")
+                .id("hidden-modules-unhide")
+                .show();
         }
         hiddenModules.clear();
         for (Module module : newList) {
@@ -80,36 +80,25 @@ public class RejectsConfig extends System<RejectsConfig> {
 
     @Override
     public RejectsConfig fromTag(NbtCompound tag) {
-        // Get the "httpAllowed" string safely
-        String httpAllowedString = "Everything";
+        // httpAllowed
         if (tag.contains("httpAllowed")) {
-            NbtElement httpAllowedElement = tag.get("httpAllowed");
-            if (httpAllowedElement != null) {
-                httpAllowedString = String.valueOf(httpAllowedElement.asString());
-                // Remove quotes if present (asString() may wrap in quotes)
-                if (httpAllowedString.startsWith("\"") && httpAllowedString.endsWith("\"")) {
-                    httpAllowedString = httpAllowedString.substring(1, httpAllowedString.length() - 1);
-                }
-                if (httpAllowedString.startsWith("Optional[")) {
-                    httpAllowedString = httpAllowedString.substring(9, httpAllowedString.length() - 1);
-                }
+            try {
+                httpAllowed = HttpAllowed.valueOf(tag.getString("httpAllowed"));
+            } catch (IllegalArgumentException e) {
+                httpAllowed = HttpAllowed.Everything;
             }
         }
 
-        try {
-            httpAllowed = HttpAllowed.valueOf(httpAllowedString);
-        } catch (IllegalArgumentException e) {
-            java.lang.System.err.println("Invalid value for httpAllowed: " + httpAllowedString);
-            httpAllowed = HttpAllowed.Everything;
-        }
+        httpUserAgent = tag.contains("httpUserAgent") ? tag.getString("httpUserAgent") : "Meteor Client";
+        loadSystemFonts = tag.contains("loadSystemFonts") && tag.getBoolean("loadSystemFonts");
+        duplicateModuleNames = tag.contains("duplicateModuleNames") && tag.getBoolean("duplicateModuleNames");
 
-        httpUserAgent = tag.contains("httpUserAgent") ? String.valueOf(tag.getString("httpUserAgent")) : "Meteor Client";
-        loadSystemFonts = tag.contains("loadSystemFonts") && tag.getBoolean("loadSystemFonts").orElse(false);
-        duplicateModuleNames = tag.contains("duplicateModuleNames") && tag.getBoolean("duplicateModuleNames").orElse(false);
-
-        NbtList valueTag = tag.getListOrEmpty("hiddenModules");
-        for (NbtElement tagI : valueTag) {
-            hiddenModules.add(String.valueOf(tagI.asString()));
+        if (tag.contains("hiddenModules", NbtElement.LIST_TYPE)) {
+            NbtList valueTag = tag.getList("hiddenModules", NbtElement.STRING_TYPE);
+            hiddenModules.clear();
+            for (NbtElement tagI : valueTag) {
+                hiddenModules.add(tagI.asString());
+            }
         }
 
         return this;
