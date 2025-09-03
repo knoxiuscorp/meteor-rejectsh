@@ -31,29 +31,7 @@ public class MeteorRejectsAddon extends MeteorAddon {
         modules.add(new OreSim());
 
         // Commands
-        Commands.add(new CenterCommand());
-        Commands.add(new ClearChatCommand());
-        Commands.add(new GhostCommand());
-        Commands.add(new GiveCommand());
-        Commands.add(new HeadsCommand());
-        Commands.add(new KickCommand());
-        Commands.add(new LocateCommand());
-        Commands.add(new PanicCommand());
-        Commands.add(new ReconnectCommand());
-        Commands.add(new ServerCommand());
-        Commands.add(new SaveSkinCommand());
         Commands.add(new SeedCommand());
-        Commands.add(new SetBlockCommand());
-        Commands.add(new SetVelocityCommand());
-        Commands.add(new TeleportCommand());
-        Commands.add(new TerrainExport());
-
-        // HUD
-        Hud hud = Systems.get(Hud.class);
-        hud.register(RadarHud.INFO);
-
-        // Themes
-        GuiThemes.add(new MeteorRoundedGuiTheme());
     }
 
     @Override
